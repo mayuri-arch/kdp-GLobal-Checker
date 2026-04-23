@@ -1,0 +1,34 @@
+{% extends "_base.html" %}
+{% block title %}Plans & pricing{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2>Plans <small>All plans cover 13 marketplaces</small></h2>
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+    {% for key, p in plans.items() %}
+    <div style="border:1px solid var(--border); border-radius:10px; padding:18px;">
+      <h3 style="margin:0 0 6px 0;">{{ p.name }}</h3>
+      <div style="font-size:28px; font-weight:700;">
+        {% if p.price_cents == 0 %}$0{% else %}${{ (p.price_cents/100)|int }}{% endif %}
+        <span class="muted" style="font-size:13px;font-weight:400;">/mo</span>
+      </div>
+      <ul style="font-size:13px; line-height:1.6; padding-left:18px;">
+        <li>{{ p.asin_limit }} ASIN{{ 's' if p.asin_limit > 1 else '' }}</li>
+        <li>{{ p.marketplaces }} Amazon marketplaces</li>
+        <li>{{ 'Daily monitoring + alerts' if p.monitoring else 'On-demand checks' }}</li>
+        <li>Auto-generated KDP support emails</li>
+        <li>{{ p.description }}</li>
+      </ul>
+      {% if key == 'free' %}
+        <a href="/auth/signup" class="btn secondary">Start free</a>
+      {% elif user.is_authenticated %}
+        <form method="post" action="/billing/checkout/{{ key }}">
+          <button type="submit">{% if user.plan == key %}Current plan{% else %}Upgrade to {{ p.name }}{% endif %}</button>
+        </form>
+      {% else %}
+        <a href="/auth/signup" class="btn">Get {{ p.name }}</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

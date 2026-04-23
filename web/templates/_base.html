@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{% block title %}KDP Revenue Intelligence{% endblock %}</title>
+<style>
+  :root {
+    --bg:#0b0e14; --panel:#131823; --border:#222a3a; --text:#e6e8ec; --muted:#8892a6;
+    --accent:#4f8cff; --green:#2ecc71; --yellow:#f1c40f; --red:#e74c3c;
+    --magenta:#c678dd; --cyan:#4ac0e0;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif; }
+  a { color:var(--accent); text-decoration:none; }
+  header { padding:18px 28px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; }
+  header h1 { margin:0; font-size:18px; }
+  header h1 small { color:var(--muted); font-weight:400; margin-left:8px; }
+  nav { display:flex; gap:18px; align-items:center; }
+  nav a { color:var(--text); font-size:14px; }
+  nav a.active { color:var(--accent); }
+  main { padding:24px 28px; max-width:1200px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:18px; margin-bottom:20px; }
+  h2 { margin:0 0 14px 0; font-size:15px; color:var(--text); }
+  h2 small { color:var(--muted); font-weight:400; font-size:12px; margin-left:8px; }
+  button, .btn {
+    padding:10px 18px; border:none; border-radius:8px; background:var(--accent);
+    color:#fff; font-weight:600; cursor:pointer; font-size:14px; display:inline-block;
+  }
+  .btn.secondary { background:#1e2637; }
+  button[disabled] { opacity:0.6; cursor:not-allowed; }
+  input[type=text], input[type=email], input[type=password], select {
+    width:100%; padding:10px 12px; background:#0d121c; color:var(--text);
+    border:1px solid var(--border); border-radius:8px; font-size:14px; outline:none;
+  }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; text-transform:uppercase; font-size:11px; letter-spacing:0.5px; }
+  tr:last-child td { border-bottom:none; }
+  .chip { padding:6px 12px; border-radius:20px; background:#0d121c; border:1px solid var(--border);
+    font-size:13px; display:inline-block; }
+  .muted { color:var(--muted); font-size:12px; }
+  .LIVE_OPTIMIZED { color:var(--green); }
+  .LIVE_LOW_CONVERSION { color:var(--yellow); }
+  .VISIBLE_NOT_PURCHASABLE { color:var(--red); font-weight:600; }
+  .NOT_FOUND { color:var(--red); }
+  .BLOCKED { color:var(--magenta); }
+  .RESTRICTED { color:var(--cyan); }
+  .ERROR { color:var(--red); }
+  .sev-critical { border-left:3px solid var(--red); padding-left:10px; }
+  .sev-high { border-left:3px solid #ff8c42; padding-left:10px; }
+  .sev-medium { border-left:3px solid var(--yellow); padding-left:10px; }
+  .sev-low { border-left:3px solid var(--cyan); padding-left:10px; }
+  .flash { padding:10px 14px; border-radius:8px; margin-bottom:14px; background:#2a1f1f; color:#ffb4b4;
+    border:1px solid #5a2b2b; }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="/" style="color:inherit">KDP Revenue Intelligence</a> <small>v2.0</small></h1>
+  <nav>
+    <a href="/">Check</a>
+    {% if current_user.is_authenticated %}
+      <a href="/dashboard">Dashboard</a>
+      <a href="/billing/pricing">Plans</a>
+      <span class="muted">{{ current_user.email }} · {{ current_user.plan }}</span>
+      <form method="post" action="/auth/logout" style="display:inline"><button class="btn secondary" type="submit">Logout</button></form>
+    {% else %}
+      <a href="/billing/pricing">Plans</a>
+      <a href="/auth/login">Log in</a>
+      <a class="btn" href="/auth/signup">Sign up</a>
+    {% endif %}
+  </nav>
+</header>
+<main>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="flash">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

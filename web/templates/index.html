@@ -1,0 +1,227 @@
+{% extends "_base.html" %}
+{% block title %}Check — KDP Revenue Intelligence{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2>Global Marketplace Check <small>13 Amazon storefronts · purchasability · revenue intelligence</small></h2>
+  <form id="check-form">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:12px; align-items:end;">
+      <div><label>ASIN</label><input type="text" id="asin" maxlength="10" placeholder="B0ABCDE123" required /></div>
+      <div><label>Book title (for support emails)</label><input type="text" id="book_title" placeholder="Optional" /></div>
+      <div><label>Author name</label><input type="text" id="author_name" placeholder="Optional" /></div>
+      <div><button type="submit" id="run-btn">Run Check</button></div>
+    </div>
+    {% if current_user.is_authenticated %}
+    <label style="margin-top:10px;display:flex;gap:6px;align-items:center;">
+      <input type="checkbox" id="monitor" /> <span class="muted">Add to daily monitoring (Pro+)</span>
+    </label>
+    {% endif %}
+  </form>
+  <div style="height:4px; background:#0d121c; border-radius:2px; overflow:hidden; margin-top:14px;">
+    <div id="bar" style="height:100%; background:var(--accent); width:0%; transition:width 0.3s;"></div>
+  </div>
+  <div id="summary" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:12px;"></div>
+</div>
+
+<div class="panel">
+  <h2>Marketplace Results</h2>
+  <table>
+    <thead><tr>
+      <th>Country</th><th>Domain</th><th>Status</th>
+      <th>Buy</th><th>Price</th><th>Title</th><th>Reviews</th><th>ms</th><th>Note</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div style="margin-top:12px; display:flex; gap:8px;">
+    <button class="btn secondary" id="export-json" disabled>Export JSON</button>
+    <button class="btn secondary" id="export-csv" disabled>Export CSV</button>
+  </div>
+</div>
+
+<div class="panel" id="intel-panel" style="display:none;">
+  <h2>Revenue Intelligence <small id="revenue-score"></small></h2>
+  <div id="issues"></div>
+</div>
+
+<div class="panel" id="email-panel" style="display:none;">
+  <h2>Ready-to-send KDP support emails</h2>
+  <p class="muted">These drafts are pre-filled with your ASIN, marketplace, and detection evidence. Paste into KDP's Contact Us form.</p>
+  <div id="emails"></div>
+</div>
+
+<script>
+const marketplaces = {{ marketplaces|map(attribute='code')|list|tojson }};
+const marketplaceMeta = {{ marketplaces|map(attribute='country')|list|tojson }};
+const marketplaceDomain = {{ marketplaces|map(attribute='domain')|list|tojson }};
+
+const form = document.getElementById('check-form');
+const rowsEl = document.getElementById('rows');
+const bar = document.getElementById('bar');
+const summaryEl = document.getElementById('summary');
+const runBtn = document.getElementById('run-btn');
+const btnJson = document.getElementById('export-json');
+const btnCsv = document.getElementById('export-csv');
+const intelPanel = document.getElementById('intel-panel');
+const emailPanel = document.getElementById('email-panel');
+
+let results = [];
+let intelligence = null;
+let emails = [];
+let total = 0;
+
+function initRows() {
+  rowsEl.innerHTML = '';
+  marketplaces.forEach((code, i) => {
+    const tr = document.createElement('tr');
+    tr.id = 'row-' + code;
+    tr.innerHTML = `
+      <td>${marketplaceMeta[i]}</td>
+      <td class="muted">amazon.${marketplaceDomain[i]}</td>
+      <td class="muted">pending…</td>
+      <td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="muted">-</td>`;
+    rowsEl.appendChild(tr);
+  });
+}
+
+function updateRow(r) {
+  const tr = document.getElementById('row-' + r.code);
+  if (!tr) return;
+  tr.children[2].className = r.status;
+  tr.children[2].textContent = r.status.replace(/_/g, ' ');
+  tr.children[3].textContent = r.has_buy_button ? '✓' : (r.has_kindle_buy || r.has_add_to_cart ? '◐' : '—');
+  tr.children[4].textContent = r.price_text || '-';
+  tr.children[5].textContent = r.title || '-';
+  tr.children[5].title = r.title || '';
+  tr.children[6].textContent = r.review_count != null ? r.review_count : '-';
+  tr.children[7].textContent = r.elapsed_ms || '-';
+  tr.children[8].textContent = r.reason || r.error || '-';
+  tr.children[8].title = r.reason || r.error || '';
+}
+
+function renderSummary() {
+  const counts = {};
+  results.forEach(r => counts[r.status] = (counts[r.status]||0)+1);
+  const live = (counts.LIVE_OPTIMIZED||0) + (counts.LIVE_LOW_CONVERSION||0);
+  summaryEl.innerHTML = `<div class="chip"><b>${live}/${total}</b> LIVE</div>` +
+    Object.entries(counts).map(([k,v]) =>
+      `<div class="chip ${k}"><b>${k.replace(/_/g,' ')}</b>: ${v}</div>`).join('');
+}
+
+function renderIntelligence(intel) {
+  if (!intel) return;
+  intelPanel.style.display = 'block';
+  document.getElementById('revenue-score').textContent =
+    `Revenue score ${intel.revenue_score}/100 · ${intel.summary}`;
+  const el = document.getElementById('issues');
+  if (!intel.issues.length) {
+    el.innerHTML = `<p class="muted">No issues detected — your global distribution looks healthy.</p>`;
+    return;
+  }
+  el.innerHTML = intel.issues.map(i => `
+    <div class="sev-${i.severity}" style="margin-bottom:14px;">
+      <div><b>${i.title}</b> <span class="muted">· impact ${i.estimated_revenue_impact}/100 · ${i.severity}</span></div>
+      <div style="margin-top:6px; font-size:13px; line-height:1.45;">${i.recommendation}</div>
+      <div class="muted" style="margin-top:4px;">Action: ${i.fix_action.replace(/_/g,' ')}</div>
+    </div>`).join('');
+}
+
+function renderEmails(drafts) {
+  if (!drafts || !drafts.length) return;
+  emailPanel.style.display = 'block';
+  const el = document.getElementById('emails');
+  el.innerHTML = drafts.map((d, idx) => `
+    <div style="margin-bottom:18px; border:1px solid var(--border); border-radius:8px; padding:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <b>${d.subject}</b>
+        <button class="btn secondary" onclick="copyEmail(${idx})">Copy body</button>
+      </div>
+      <div class="muted" style="margin-bottom:6px;">Category: ${d.category}</div>
+      <pre id="email-body-${idx}" style="white-space:pre-wrap; font-family:inherit; margin:0; font-size:13px;">${d.body.replace(/</g,'&lt;')}</pre>
+    </div>`).join('');
+}
+
+function copyEmail(i) {
+  const el = document.getElementById(`email-body-${i}`);
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    alert('Email body copied to clipboard.');
+  });
+}
+
+function download(name, mime, data) {
+  const blob = new Blob([data], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+btnJson.addEventListener('click', () => {
+  const asin = document.getElementById('asin').value.trim().toUpperCase();
+  download(`${asin}.json`, 'application/json',
+    JSON.stringify({asin, results, intelligence, emails}, null, 2));
+});
+btnCsv.addEventListener('click', () => {
+  const asin = document.getElementById('asin').value.trim().toUpperCase();
+  if (!results.length) return;
+  const keys = Object.keys(results[0]);
+  const esc = v => v == null ? '' : `"${String(v).replace(/"/g,'""')}"`;
+  const csv = [keys.join(','), ...results.map(r => keys.map(k => esc(r[k])).join(','))].join('\n');
+  download(`${asin}.csv`, 'text/csv', csv);
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const asin = document.getElementById('asin').value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{10}$/.test(asin)) { alert('ASIN must be 10 chars'); return; }
+  const body = {
+    asin,
+    book_title: document.getElementById('book_title').value,
+    author_name: document.getElementById('author_name').value,
+    monitor: document.getElementById('monitor')?.checked || false,
+  };
+  runBtn.disabled = true; runBtn.textContent = 'Checking…';
+  btnJson.disabled = true; btnCsv.disabled = true;
+  results = []; intelligence = null; emails = [];
+  summaryEl.innerHTML = ''; bar.style.width = '0%';
+  intelPanel.style.display = 'none'; emailPanel.style.display = 'none';
+  initRows();
+
+  const res = await fetch('/api/check', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert(err.error || 'Request failed');
+    runBtn.disabled = false; runBtn.textContent = 'Run Check';
+    return;
+  }
+  const {job_id, total: t} = await res.json();
+  total = t;
+
+  const es = new EventSource(`/api/stream/${job_id}`);
+  es.addEventListener('result', ev => {
+    const r = JSON.parse(ev.data);
+    results.push(r); updateRow(r);
+    bar.style.width = `${(results.length/total)*100}%`;
+    renderSummary();
+  });
+  es.addEventListener('intelligence', ev => {
+    intelligence = JSON.parse(ev.data); renderIntelligence(intelligence);
+  });
+  es.addEventListener('emails', ev => {
+    emails = JSON.parse(ev.data); renderEmails(emails);
+  });
+  es.addEventListener('done', () => {
+    es.close();
+    runBtn.disabled = false; runBtn.textContent = 'Run Check';
+    btnJson.disabled = false; btnCsv.disabled = false;
+  });
+  es.addEventListener('error', ev => {
+    if (ev.data) try { alert(JSON.parse(ev.data).message); } catch {}
+    es.close();
+    runBtn.disabled = false; runBtn.textContent = 'Run Check';
+  });
+});
+
+initRows();
+</script>
+{% endblock %}

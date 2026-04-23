@@ -1,0 +1,67 @@
+{% extends "_base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2>Your ASINs <small>{{ asins|length }} tracked</small></h2>
+  {% if asins %}
+  <table>
+    <thead><tr><th>ASIN</th><th>Title</th><th>Monitoring</th><th>Added</th><th></th></tr></thead>
+    <tbody>
+      {% for a in asins %}
+      <tr>
+        <td><b>{{ a.asin }}</b></td>
+        <td>{{ a.book_title or '-' }}</td>
+        <td>{{ 'daily' if a.monitoring_enabled else 'off' }}</td>
+        <td class="muted">{{ a.created_at }}</td>
+        <td><a href="/history/{{ a.asin }}">history</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No ASINs yet — run your first check from <a href="/">Check</a>.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Recent change events</h2>
+  {% if events %}
+  <table>
+    <thead><tr><th>ASIN</th><th>Marketplace</th><th>From</th><th>To</th><th>When</th></tr></thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td>{{ e.asin }}</td>
+        <td>{{ e.marketplace_code }}</td>
+        <td class="muted">{{ e.from_status }}</td>
+        <td class="{{ e.to_status }}">{{ e.to_status }}</td>
+        <td class="muted">{{ e.detected_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No status changes detected yet. Enable monitoring on your ASINs to track flips.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Recent checks</h2>
+  {% if checks %}
+  <table>
+    <thead><tr><th>ASIN</th><th>Summary</th><th>Score</th><th>Live</th><th>When</th></tr></thead>
+    <tbody>
+      {% for c in checks %}
+      <tr>
+        <td>{{ c.asin }}</td>
+        <td>{{ c.summary }}</td>
+        <td>{{ c.revenue_score }}/100</td>
+        <td>{{ c.live_count }}/{{ c.total }}</td>
+        <td class="muted">{{ c.ran_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}
