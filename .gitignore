@@ -1,5 +1,43 @@
+# Virtualenv
 venv/
-.env
+.venv/
+env/
+
+# Python bytecode
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# Local SQLite database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
 *.log
+
+# Playwright browsers (downloaded locally)
+ms-playwright/
+
+# Build / dist artifacts
+build/
+dist/
+*.egg-info/
+
+# Local reports
+out.json
+out.csv
+*_report.json
+*_report.csv

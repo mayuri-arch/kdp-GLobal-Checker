@@ -56,13 +56,27 @@ class BrowserFetcher:
                 from playwright.async_api import async_playwright
             except ImportError as e:
                 raise RuntimeError(
-                    "Playwright not installed. Run: pip install playwright && playwright install chromium"
+                    "Playwright package not installed. Run: pip install playwright"
                 ) from e
-            self._playwright = await async_playwright().start()
-            launch_args = {"headless": self.headless}
-            if self.proxy:
-                launch_args["proxy"] = {"server": self.proxy}
-            self._browser = await self._playwright.chromium.launch(**launch_args)
+            try:
+                self._playwright = await async_playwright().start()
+                launch_args = {"headless": self.headless}
+                if self.proxy:
+                    launch_args["proxy"] = {"server": self.proxy}
+                self._browser = await self._playwright.chromium.launch(**launch_args)
+            except Exception as e:
+                # Most common on PaaS hosts: Chromium binary not installed
+                # (user did not run `playwright install chromium`). Degrade
+                # cleanly — the caller treats this as "no fallback available".
+                if self._playwright is not None:
+                    try:
+                        await self._playwright.stop()
+                    finally:
+                        self._playwright = None
+                raise RuntimeError(
+                    f"Playwright Chromium not available ({type(e).__name__}: {e}). "
+                    f"Run `playwright install chromium` or disable the browser fallback."
+                ) from e
 
     async def close(self):
         if self._browser:

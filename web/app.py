@@ -111,9 +111,14 @@ def create_app() -> Flask:
         user_id = current_user.user_id if current_user.is_authenticated else None
         monitor = bool(data.get("monitor"))
 
+        use_browser = os.environ.get("USE_BROWSER_FALLBACK", "1") == "1"
+
         def worker():
             async def run():
-                checker = MarketplaceChecker(concurrency=concurrency, max_retries=retries)
+                checker = MarketplaceChecker(
+                    concurrency=concurrency, max_retries=retries,
+                    use_browser_fallback=use_browser,
+                )
 
                 def on_progress(result):
                     payload = result.to_dict()

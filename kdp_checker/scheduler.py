@@ -53,10 +53,32 @@ def _run_checks_once():
 
 
 def start(schedule_hour: int = 7, schedule_minute: int = 0):
-    """Start the background scheduler (idempotent)."""
+    """Start the background scheduler (idempotent, multi-worker safe).
+
+    Uses an OS-level file lock so that only ONE gunicorn/uvicorn worker
+    actually schedules jobs. Other workers silently no-op. If the lock can't
+    be acquired, we assume another worker owns the scheduler.
+    """
     global _scheduler
     if _scheduler is not None:
         return _scheduler
+
+    # Multi-worker guard — best effort, cross-platform (Windows + POSIX).
+    lock_path = os.environ.get("KDP_SCHEDULER_LOCK", "/tmp/kdp_scheduler.lock")
+    try:
+        # O_EXCL creates the file atomically; fails if it exists.
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        # Best-effort cleanup on interpreter exit
+        import atexit
+        atexit.register(lambda: os.path.exists(lock_path) and os.remove(lock_path))
+    except FileExistsError:
+        log.info("Scheduler lock %s already held — skipping in this worker.", lock_path)
+        return None
+    except OSError as e:
+        log.warning("Scheduler lock unavailable (%s); continuing anyway.", e)
+
     _scheduler = BackgroundScheduler(timezone="UTC")
     # Daily at the configured UTC hour
     _scheduler.add_job(
