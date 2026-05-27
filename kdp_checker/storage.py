@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS users (
     plan TEXT NOT NULL DEFAULT 'free',
     razorpay_customer_id TEXT,
     razorpay_subscription_id TEXT,
+    subscription_status TEXT DEFAULT 'inactive',
+    subscription_start INTEGER,
+    subscription_end INTEGER,
+    last_payment_at INTEGER,
+    plan_type TEXT DEFAULT 'free',
     created_at INTEGER NOT NULL
 );
 
@@ -162,6 +167,17 @@ def connect(db_path: str | Path = DEFAULT_DB):
         wrapped = PGConnectionWrapper(conn)
         try:
             wrapped.executescript(SCHEMA)
+            # Dynamic alter table fallback to ensure existing tables get the new columns securely
+            with conn.cursor() as cur:
+                for col, col_type in [("subscription_status", "TEXT DEFAULT 'inactive'"),
+                                      ("subscription_start", "BIGINT"),
+                                      ("subscription_end", "BIGINT"),
+                                      ("last_payment_at", "BIGINT"),
+                                      ("plan_type", "TEXT DEFAULT 'free'")]:
+                    try:
+                        cur.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {col_type}")
+                    except Exception:
+                        pass
             yield wrapped
             wrapped.commit()
         except Exception:
@@ -175,6 +191,16 @@ def connect(db_path: str | Path = DEFAULT_DB):
         conn.execute("PRAGMA foreign_keys = ON")
         try:
             conn.executescript(SCHEMA)
+            # Dynamic alter table fallback to ensure local sqlite gets columns securely
+            for col, col_type in [("subscription_status", "TEXT DEFAULT 'inactive'"),
+                                  ("subscription_start", "INTEGER"),
+                                  ("subscription_end", "INTEGER"),
+                                  ("last_payment_at", "INTEGER"),
+                                  ("plan_type", "TEXT DEFAULT 'free'")]:
+                try:
+                    conn.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+                except sqlite3.OperationalError:
+                    pass
             yield conn
             conn.commit()
         except Exception:
@@ -207,11 +233,23 @@ def get_user(conn, user_id: int):
 
 def update_user_plan(conn, user_id: int, plan: str,
                      razorpay_customer_id: str | None = None,
-                     razorpay_subscription_id: str | None = None):
+                     razorpay_subscription_id: str | None = None,
+                     subscription_status: str | None = None,
+                     subscription_start: int | None = None,
+                     subscription_end: int | None = None,
+                     last_payment_at: int | None = None,
+                     plan_type: str | None = None):
     conn.execute(
-        "UPDATE users SET plan = ?, razorpay_customer_id = COALESCE(?, razorpay_customer_id),"
-        " razorpay_subscription_id = COALESCE(?, razorpay_subscription_id) WHERE id = ?",
-        (plan, razorpay_customer_id, razorpay_subscription_id, user_id),
+        "UPDATE users SET plan = ?, "
+        " razorpay_customer_id = COALESCE(?, razorpay_customer_id),"
+        " razorpay_subscription_id = COALESCE(?, razorpay_subscription_id),"
+        " subscription_status = COALESCE(?, subscription_status),"
+        " subscription_start = COALESCE(?, subscription_start),"
+        " subscription_end = COALESCE(?, subscription_end),"
+        " last_payment_at = COALESCE(?, last_payment_at),"
+        " plan_type = COALESCE(?, plan_type) WHERE id = ?",
+        (plan, razorpay_customer_id, razorpay_subscription_id, subscription_status,
+         subscription_start, subscription_end, last_payment_at, plan_type, user_id),
     )
 
 

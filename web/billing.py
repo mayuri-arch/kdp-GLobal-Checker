@@ -58,17 +58,21 @@ def pricing():
 @billing_bp.post("/checkout/<plan>")
 @login_required
 def checkout(plan):
-    if plan not in PLANS or plan == "free":
+    VALID_PLANS = {
+        "pro": os.getenv("RAZORPAY_PRICE_PRO"),
+        "agency": os.getenv("RAZORPAY_PRICE_AGENCY")
+    }
+
+    if plan not in VALID_PLANS:
         abort(404)
         
     client = _configure_razorpay()
     if not client:
         return jsonify({"error": "Razorpay not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET."}), 503
 
-    plan_env = {"pro": "RAZORPAY_PRICE_PRO", "agency": "RAZORPAY_PRICE_AGENCY"}[plan]
-    plan_id = os.environ.get(plan_env)
+    plan_id = VALID_PLANS[plan]
     if not plan_id:
-        return jsonify({"error": f"{plan_env} not set in environment"}), 503
+        return jsonify({"error": f"RAZORPAY_PRICE_{plan.upper()} not set in environment"}), 503
 
     try:
         # Create a Subscription via Razorpay Subscriptions API
@@ -107,13 +111,17 @@ def webhook():
         return "razorpay not configured", 503
         
     secret = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
-    payload = request.get_data()
-    sig = request.headers.get("X-Razorpay-Signature", "")
+    payload = request.data
+    signature = request.headers.get("X-Razorpay-Signature")
     
     if secret:
         try:
-            # Verify Razorpay webhook signature
-            client.utility.verify_webhook_signature(payload.decode("utf-8"), sig, secret)
+            # Verify Razorpay signature using the raw payload body bytes
+            client.utility.verify_webhook_signature(
+                payload,
+                signature,
+                secret
+            )
         except Exception as e:
             current_app.logger.exception("Webhook verify failed")
             return f"bad signature: {e}", 400
@@ -126,45 +134,63 @@ def webhook():
     etype = event_data.get("event")
     payload_obj = event_data.get("payload", {})
 
-    if etype == "subscription.charged":
+    if etype in ("subscription.authenticated", "subscription.activated", "subscription.completed", "subscription.cancelled", "subscription.paused", "subscription.halted"):
         sub = payload_obj.get("subscription", {}).get("entity", {})
+        sub_id = sub.get("id")
+        customer_id = sub.get("customer_id")
+        status = sub.get("status", "unknown")
+        
+        start_at = sub.get("current_start") or sub.get("start_at")
+        end_at = sub.get("current_end") or sub.get("end_at")
+        charge_at = sub.get("charge_at")
+        last_payment = charge_at - 2592000 if charge_at else None
+        
         notes = sub.get("notes", {})
         user_id = int(notes.get("user_id", 0) or 0)
         plan = notes.get("plan", "pro")
-        customer_id = sub.get("customer_id")
-        sub_id = sub.get("id")
         
-        # Robust fallback: lookup by customer_id if notes are empty
+        # Robust fallback lookups
         if not user_id and customer_id:
             with storage.connect() as conn:
                 user = conn.execute("SELECT id FROM users WHERE razorpay_customer_id = ?", (customer_id,)).fetchone()
                 if user:
                     user_id = user["id"]
-                    
-        if user_id:
+        if not user_id and sub_id:
             with storage.connect() as conn:
-                storage.update_user_plan(conn, user_id, plan, customer_id, sub_id)
-
-    elif etype in ("subscription.cancelled", "subscription.paused"):
-        sub = payload_obj.get("subscription", {}).get("entity", {})
-        customer_id = sub.get("customer_id")
-        sub_id = sub.get("id")
-        
-        # Get user_id from notes if present
-        notes = sub.get("notes", {})
-        user_id = int(notes.get("user_id", 0) or 0)
-        
-        with storage.connect() as conn:
-            if user_id:
-                storage.update_user_plan(conn, user_id, "free")
-            elif customer_id:
-                user = conn.execute("SELECT id FROM users WHERE razorpay_customer_id = ?", (customer_id,)).fetchone()
-                if user:
-                    storage.update_user_plan(conn, user["id"], "free")
-            elif sub_id:
                 user = conn.execute("SELECT id FROM users WHERE razorpay_subscription_id = ?", (sub_id,)).fetchone()
                 if user:
-                    storage.update_user_plan(conn, user["id"], "free")
+                    user_id = user["id"]
+
+        if user_id:
+            db_plan = "free" if etype in ("subscription.cancelled", "subscription.paused", "subscription.halted") else plan
+            with storage.connect() as conn:
+                storage.update_user_plan(
+                    conn,
+                    user_id=user_id,
+                    plan=db_plan,
+                    razorpay_customer_id=customer_id,
+                    razorpay_subscription_id=sub_id,
+                    subscription_status=status,
+                    subscription_start=start_at,
+                    subscription_end=end_at,
+                    last_payment_at=last_payment,
+                    plan_type=plan
+                )
+
+    elif etype == "payment.failed":
+        payment = payload_obj.get("payment", {}).get("entity", {})
+        sub_id = payment.get("subscription_id")
+        if sub_id:
+            with storage.connect() as conn:
+                user = conn.execute("SELECT id FROM users WHERE razorpay_subscription_id = ?", (sub_id,)).fetchone()
+                if user:
+                    storage.update_user_plan(
+                        conn,
+                        user_id=user["id"],
+                        plan="free",
+                        subscription_status="payment_failed",
+                        plan_type="free"
+                    )
 
     return "", 200
 

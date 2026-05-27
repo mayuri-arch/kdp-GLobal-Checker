@@ -23,6 +23,11 @@ class User(UserMixin):
         self.plan = row["plan"]
         self.razorpay_customer_id = row["razorpay_customer_id"]
         self.razorpay_subscription_id = row["razorpay_subscription_id"]
+        self.subscription_status = row["subscription_status"]
+        self.subscription_start = row["subscription_start"]
+        self.subscription_end = row["subscription_end"]
+        self.last_payment_at = row["last_payment_at"]
+        self.plan_type = row["plan_type"]
 
     @classmethod
     def from_id(cls, user_id: int):
