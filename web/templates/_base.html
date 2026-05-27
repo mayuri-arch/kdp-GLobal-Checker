@@ -94,7 +94,12 @@
   }
   
   label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:500; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table { width:100%; border-collapse:collapse; font-size:13px; min-width: 600px; }
   th, td { padding:12px 14px; text-align:left; border-bottom:1px solid var(--border); vertical-align:middle; }
   th { color:var(--muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:0.5px; }
   tr:last-child td { border-bottom:none; }
@@ -117,6 +122,20 @@
   .RESTRICTED { background:rgba(6,182,212,0.12); color:#22d3ee; border:1px solid rgba(6,182,212,0.2); }
   .ERROR { background:rgba(239,68,68,0.12); color:#f87171; border:1px solid rgba(239,68,68,0.2); }
   
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: rgba(13, 18, 28, 0.4);
+    backdrop-filter: blur(4px);
+    transition: all 0.2s ease-in-out;
+    margin-top: 10px;
+  }
+  .empty-state:hover {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: rgba(13, 18, 28, 0.6);
+  }
   .chip { padding:6px 12px; border-radius:20px; background:rgba(255,255,255,0.03); border:1px solid var(--border);
     font-size:13px; display:inline-block; font-weight:500; }
   .muted { color:var(--muted); font-size:12px; }

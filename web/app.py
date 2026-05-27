@@ -150,6 +150,9 @@ def create_app() -> Flask:
                                 storage.upsert_asin(conn, user_id, asin, book_title,
                                                     author_name, monitor)
                                 storage.save_check(conn, asin, report, results, user_id)
+                                # Trigger email notifications immediately for any newly detected change events
+                                from kdp_checker.notifier import send_pending_notifications
+                                send_pending_notifications(conn)
                         except Exception as e:
                             q.put(("error", {"message": f"DB save failed: {e}"}))
                     q.put(("done", {"asin": asin, "total": len(targets)}))

@@ -4,19 +4,21 @@
 <div class="panel">
   <h2>History for {{ asin }} <small>{{ rows|length }} checks</small></h2>
   {% if rows %}
-  <table>
-    <thead><tr><th>When (UTC)</th><th>Score</th><th>Live</th><th>Summary</th></tr></thead>
-    <tbody>
-      {% for r in rows %}
-      <tr>
-        <td class="muted">{{ r.ran_at }}</td>
-        <td>{{ r.revenue_score }}/100</td>
-        <td>{{ r.live_count }}/{{ r.total }}</td>
-        <td>{{ r.summary }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-responsive">
+    <table>
+      <thead><tr><th>When (UTC)</th><th>Score</th><th>Live</th><th>Summary</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="muted">{{ r.ran_at }}</td>
+          <td>{{ r.revenue_score }}/100</td>
+          <td>{{ r.live_count }}/{{ r.total }}</td>
+          <td>{{ r.summary }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
   <p class="muted">No checks yet for this ASIN.</p>
   {% endif %}

@@ -24,13 +24,15 @@
 
 <div class="panel">
   <h2>Marketplace Results</h2>
-  <table>
-    <thead><tr>
-      <th>Country</th><th>Domain</th><th>Status</th>
-      <th>Buy</th><th>Price</th><th>Title</th><th>Reviews</th><th>ms</th><th>Note</th>
-    </tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
+  <div class="table-responsive">
+    <table>
+      <thead><tr>
+        <th>Country</th><th>Domain</th><th>Status</th>
+        <th>Buy</th><th>Price</th><th>Title</th><th>Reviews</th><th>ms</th><th>Note</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
   <div style="margin-top:12px; display:flex; gap:8px;">
     <button class="btn secondary" id="export-json" disabled>Export JSON</button>
     <button class="btn secondary" id="export-csv" disabled>Export CSV</button>

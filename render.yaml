@@ -22,14 +22,16 @@ services:
         value: /tmp/kdp_checker.db # free tier has no persistent disk; see note below
       - key: ENABLE_SCHEDULER
         value: "0"                 # set to "1" after upgrading to a paid plan
-      # Stripe (optional — paste keys in the dashboard, not here)
-      - key: STRIPE_SECRET_KEY
+      # Razorpay (optional — paste keys in the dashboard, not here)
+      - key: RAZORPAY_KEY_ID
         sync: false
-      - key: STRIPE_WEBHOOK_SECRET
+      - key: RAZORPAY_KEY_SECRET
         sync: false
-      - key: STRIPE_PRICE_PRO
+      - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRICE_AGENCY
+      - key: RAZORPAY_PRICE_PRO
+        sync: false
+      - key: RAZORPAY_PRICE_AGENCY
         sync: false
 
 # IMPORTANT — Free plan caveats:

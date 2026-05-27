@@ -7,10 +7,10 @@
     {% for key, p in plans.items() %}
     <div style="border:1px solid var(--border); border-radius:10px; padding:18px;">
       <h3 style="margin:0 0 6px 0;">{{ p.name }}</h3>
-      <div style="font-size:28px; font-weight:700;">
-        {% if p.price_cents == 0 %}$0{% else %}${{ (p.price_cents/100)|int }}{% endif %}
-        <span class="muted" style="font-size:13px;font-weight:400;">/mo</span>
-      </div>
+       <div style="font-size:28px; font-weight:700;">
+         {% if p.price_cents == 0 %}{{ currency_symbol|default('$') }}0{% else %}{{ currency_symbol|default('$') }}{{ (p.price_cents/100)|int }}{% endif %}
+         <span class="muted" style="font-size:13px;font-weight:400;">/mo</span>
+       </div>
       <ul style="font-size:13px; line-height:1.6; padding-left:18px;">
         <li>{{ p.asin_limit }} ASIN{{ 's' if p.asin_limit > 1 else '' }}</li>
         <li>{{ p.marketplaces }} Amazon marketplaces</li>

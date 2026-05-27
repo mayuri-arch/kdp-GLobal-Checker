@@ -25,7 +25,7 @@ python -m playwright install chromium
 
 if not exist .env (
   copy .env.example .env >nul
-  echo Created .env — edit it to add Stripe keys etc.
+  echo Created .env — edit it to add Razorpay keys etc.
 )
 
 echo.

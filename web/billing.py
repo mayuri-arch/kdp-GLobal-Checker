@@ -52,7 +52,8 @@ def _configure_razorpay():
 
 @billing_bp.get("/pricing")
 def pricing():
-    return render_template("pricing.html", plans=PLANS, user=current_user)
+    currency_symbol = os.environ.get("BILLING_CURRENCY_SYMBOL", "$")
+    return render_template("pricing.html", plans=PLANS, user=current_user, currency_symbol=currency_symbol)
 
 
 @billing_bp.post("/checkout/<plan>")
@@ -112,13 +113,14 @@ def webhook():
         
     secret = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
     payload = request.data
+    payload_str = payload.decode("utf-8") if isinstance(payload, bytes) else payload
     signature = request.headers.get("X-Razorpay-Signature")
     
     if secret:
         try:
-            # Verify Razorpay signature using the raw payload body bytes
+            # Verify Razorpay signature using the decoded payload string to prevent SDK TypeErrors
             client.utility.verify_webhook_signature(
-                payload,
+                payload_str,
                 signature,
                 secret
             )

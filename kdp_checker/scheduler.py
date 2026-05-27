@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+import tempfile
 
 from .checker import MarketplaceChecker
 from .intelligence import analyze_results
@@ -48,6 +49,14 @@ def _run_checks_once():
                          report.revenue_score, report.live_count, report.total)
             except Exception:
                 log.exception("Scheduled check failed for ASIN %s", asin)
+        
+        # Trigger email alerts for any detected change events
+        try:
+            from .notifier import send_pending_notifications
+            with storage.connect() as conn:
+                send_pending_notifications(conn)
+        except Exception:
+            log.exception("Email notification sweep failed")
     finally:
         loop.close()
 
@@ -64,7 +73,8 @@ def start(schedule_hour: int = 7, schedule_minute: int = 0):
         return _scheduler
 
     # Multi-worker guard — best effort, cross-platform (Windows + POSIX).
-    lock_path = os.environ.get("KDP_SCHEDULER_LOCK", "/tmp/kdp_scheduler.lock")
+    default_lock = os.path.join(tempfile.gettempdir(), "kdp_scheduler.lock")
+    lock_path = os.environ.get("KDP_SCHEDULER_LOCK", default_lock)
     try:
         # O_EXCL creates the file atomically; fails if it exists.
         fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
