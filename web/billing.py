@@ -138,6 +138,51 @@ def success():
     return render_template("success.html")
 
 
+@billing_bp.post("/success")
+@login_required
+def success_post():
+    sub_id = (request.form.get("subscription_id") or "").strip()
+    if not sub_id or not sub_id.startswith("sub_"):
+        flash("Invalid Subscription ID format. Should start with 'sub_'.", "error")
+        return redirect(url_for("billing.success"))
+        
+    client = _configure_razorpay()
+    if not client:
+        flash("Razorpay is not configured.", "error")
+        return redirect(url_for("billing.success"))
+        
+    try:
+        # Securely fetch subscription status directly from Razorpay API
+        subscription = client.subscription.fetch(sub_id)
+        status = subscription.get("status")
+        notes = subscription.get("notes", {})
+        plan = notes.get("plan", "pro")
+        customer_id = subscription.get("customer_id")
+        
+        if status in ("active", "authenticated", "activated"):
+            with storage.connect() as conn:
+                storage.update_user_plan(
+                    conn,
+                    user_id=current_user.user_id,
+                    plan=plan,
+                    razorpay_customer_id=customer_id,
+                    razorpay_subscription_id=sub_id,
+                    subscription_status=status,
+                    subscription_start=subscription.get("current_start") or subscription.get("start_at"),
+                    subscription_end=subscription.get("current_end") or subscription.get("end_at"),
+                    plan_type=plan
+                )
+            current_user.plan = plan
+            flash(f"Success! Subscription verified. Account upgraded to {plan.upper()}.", "success")
+            return redirect(url_for("dashboard"))
+        else:
+            flash(f"Subscription found but status is '{status}'. It must be active to upgrade.", "error")
+    except Exception as e:
+        flash(f"Verification failed: {e}", "error")
+        
+    return redirect(url_for("billing.success"))
+
+
 @billing_bp.post("/webhook")
 def webhook():
     client = _configure_razorpay()

@@ -4,6 +4,16 @@
   <h2>You're upgraded</h2>
   <p>Thanks for subscribing. Your plan is active. Redirecting you to your dashboard in 3 seconds...</p>
   <a class="btn" href="/dashboard">Open dashboard</a>
+  
+  <div style="margin-top:40px; border-top:1px solid var(--border); padding-top:24px;">
+    <p class="muted" style="font-size:12px; margin-bottom:12px; line-height:1.5;">
+      Did you pay but your plan hasn't updated yet? (e.g., during local host testing where background webhooks are blocked)
+    </p>
+    <form method="post" action="/billing/success" style="display:flex; gap:8px; max-width:400px; margin:0 auto; flex-wrap:wrap; justify-content:center;">
+      <input type="text" name="subscription_id" placeholder="Enter Subscription ID (sub_...)" required style="font-size:13px; padding:6px 12px; flex-grow:1; min-width:240px;" />
+      <button type="submit" style="padding:6px 16px; font-size:13px; font-weight:600; white-space:nowrap;">Verify & Upgrade</button>
+    </form>
+  </div>
 </div>
 
 <script>
