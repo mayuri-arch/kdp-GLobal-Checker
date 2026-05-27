@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import os
 import secrets
+import smtplib
 import time
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
@@ -50,16 +53,68 @@ def login():
     return render_template("login.html")
 
 
+def _send_reset_email(to_addr: str, reset_link: str) -> bool:
+    host = os.environ.get("SMTP_HOST")
+    port_val = os.environ.get("SMTP_PORT", "587")
+    try:
+        port = int(port_val)
+    except ValueError:
+        port = 587
+    user = os.environ.get("SMTP_USER")
+    password = os.environ.get("SMTP_PASSWORD")
+    from_addr = os.environ.get("SMTP_FROM", "noreply@kdpchecker.com")
+    
+    if not host or not user or not password:
+        return False
+        
+    msg = MIMEMultipart()
+    msg["From"] = from_addr
+    msg["To"] = to_addr
+    msg["Subject"] = "KDP Global Checker - Password Recovery"
+    
+    body = f"""Hello,
+
+We received a request to recover your password for your KDP Global Checker account.
+
+Please click the secure link below to reset your password:
+{reset_link}
+
+This link is valid for 1 hour. If you did not request this reset, please ignore this email.
+
+Best regards,
+The KDP Global Checker Team"""
+    msg.attach(MIMEText(body, "plain"))
+    
+    try:
+        smtp = smtplib.SMTP(host, port, timeout=15)
+        try:
+            if port == 587:
+                smtp.starttls()
+            if user and password:
+                smtp.login(user, password)
+            smtp.sendmail(from_addr, [to_addr], msg.as_string())
+            return True
+        finally:
+            smtp.quit()
+    except Exception as e:
+        print(f"Failed to send SMTP email: {e}", flush=True)
+        return False
+
+
 @auth_bp.post("/login")
 def login_post():
     email = (request.form.get("email") or "").strip().lower()
     password = request.form.get("password") or ""
+    remember = bool(request.form.get("remember"))
+    
     with storage.connect() as conn:
         row = storage.get_user_by_email(conn, email)
     if not row or not check_password_hash(row["password_hash"], password):
         flash("Invalid credentials", "error")
-        return redirect(url_for("auth.login"))
-    login_user(User(row), remember=True)
+        # Direct template render with show_forgot=True so recovery alert triggers instantly
+        return render_template("login.html", show_forgot=True)
+        
+    login_user(User(row), remember=remember)
     return redirect(url_for("index"))
 
 
@@ -111,7 +166,7 @@ def forgot_password_post():
     with storage.connect() as conn:
         user = storage.get_user_by_email(conn, email)
         if not user:
-            # Standard secure warning mitigation (avoid leaking registered emails)
+            # Standard secure warning mitigation
             flash("If that email is registered, a password recovery link has been generated.", "info")
             return redirect(url_for("auth.login"))
             
@@ -126,10 +181,16 @@ def forgot_password_post():
     reset_link = url_for("auth.reset_password", token=token, _external=True)
     print(f"\n========================================\nPASSWORD RECOVERY LINK:\n{reset_link}\n========================================\n", flush=True)
     
-    flash("A password recovery link has been generated in the logs.", "success")
-    is_prod = os.environ.get("FLASK_ENV") == "production" or os.environ.get("DATABASE_URL") is not None
-    if not is_prod:
-         flash(f"Dev recovery link (logged): {reset_link}", "info")
+    # Try real SMTP delivery
+    email_sent = _send_reset_email(email, reset_link)
+    if email_sent:
+        flash("A password recovery link has been sent to your email inbox.", "success")
+    else:
+        # Fallback to console logs and warning alert
+        flash("A password recovery link has been generated in the logs (SMTP not configured).", "success")
+        is_prod = os.environ.get("FLASK_ENV") == "production" or os.environ.get("DATABASE_URL") is not None
+        if not is_prod:
+             flash(f"Dev recovery link (logged): {reset_link}", "info")
          
     return redirect(url_for("auth.login"))
 

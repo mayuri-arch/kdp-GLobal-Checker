@@ -4,14 +4,28 @@
 <div class="panel" style="max-width:420px; margin:40px auto;">
   <h2>Log in</h2>
   <form method="post" action="/auth/login">
-    <div style="margin-bottom:12px;"><label>Email</label><input type="email" name="email" required /></div>
-    <div style="margin-bottom:12px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-        <label style="margin:0;">Password</label>
-        <a href="/auth/forgot-password" style="font-size:12px;">Forgot password?</a>
-      </div>
+    {% if show_forgot %}
+    <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.25); border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px; color:#ef4444; display:flex; justify-content:space-between; align-items:center;">
+      <span>Incorrect credentials.</span>
+      <a href="/auth/forgot-password" style="font-weight:600; text-decoration:underline; color:#ef4444;">Forgot password?</a>
+    </div>
+    {% endif %}
+    
+    <div style="margin-bottom:14px;">
+      <label>Email</label>
+      <input type="email" name="email" required style="width:100%;" />
+    </div>
+    
+    <div style="margin-bottom:14px;">
+      <label>Password</label>
       <input type="password" name="password" required style="width:100%;" />
     </div>
+    
+    <div style="margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" name="remember" id="remember" style="width:auto; margin:0;" />
+      <label for="remember" style="margin:0; font-size:13px; font-weight:400; cursor:pointer;">Remember me</label>
+    </div>
+    
     <button type="submit" style="width:100%;">Log in</button>
     <div class="muted" style="margin-top:16px; font-size:13px;">No account? <a href="/auth/signup">Sign up</a></div>
   </form>
