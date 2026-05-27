@@ -111,11 +111,35 @@ def webhook():
             with storage.connect() as conn:
                 storage.update_user_plan(conn, user_id, plan, customer, sub)
 
-    elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
-        user_id = int(data.get("metadata", {}).get("user_id", 0) or 0)
-        if user_id:
+    elif etype == "customer.subscription.updated":
+        customer = data.get("customer")
+        items = data.get("items", {}).get("data", [])
+        plan = "free"
+        if items:
+            price_id = items[0].get("price", {}).get("id")
+            if price_id == os.environ.get("STRIPE_PRICE_PRO"):
+                plan = "pro"
+            elif price_id == os.environ.get("STRIPE_PRICE_AGENCY"):
+                plan = "agency"
+        
+        # If subscription is no longer active/trialing, downgrade to free
+        status = data.get("status")
+        if status not in ("active", "trialing"):
+            plan = "free"
+            
+        if customer:
             with storage.connect() as conn:
-                storage.update_user_plan(conn, user_id, "free")
+                user = conn.execute("SELECT id FROM users WHERE stripe_customer_id = ?", (customer,)).fetchone()
+                if user:
+                    storage.update_user_plan(conn, user["id"], plan, customer, data.get("id"))
+
+    elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
+        customer = data.get("customer")
+        if customer:
+            with storage.connect() as conn:
+                user = conn.execute("SELECT id FROM users WHERE stripe_customer_id = ?", (customer,)).fetchone()
+                if user:
+                    storage.update_user_plan(conn, user["id"], "free")
 
     return "", 200
 
