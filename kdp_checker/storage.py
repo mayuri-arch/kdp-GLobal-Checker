@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     name TEXT,
     plan TEXT NOT NULL DEFAULT 'free',
-    stripe_customer_id TEXT,
-    stripe_subscription_id TEXT,
+    razorpay_customer_id TEXT,
+    razorpay_subscription_id TEXT,
     created_at INTEGER NOT NULL
 );
 
@@ -206,12 +206,12 @@ def get_user(conn, user_id: int):
 
 
 def update_user_plan(conn, user_id: int, plan: str,
-                     stripe_customer_id: str | None = None,
-                     stripe_subscription_id: str | None = None):
+                     razorpay_customer_id: str | None = None,
+                     razorpay_subscription_id: str | None = None):
     conn.execute(
-        "UPDATE users SET plan = ?, stripe_customer_id = COALESCE(?, stripe_customer_id),"
-        " stripe_subscription_id = COALESCE(?, stripe_subscription_id) WHERE id = ?",
-        (plan, stripe_customer_id, stripe_subscription_id, user_id),
+        "UPDATE users SET plan = ?, razorpay_customer_id = COALESCE(?, razorpay_customer_id),"
+        " razorpay_subscription_id = COALESCE(?, razorpay_subscription_id) WHERE id = ?",
+        (plan, razorpay_customer_id, razorpay_subscription_id, user_id),
     )
 
 

@@ -5,7 +5,7 @@
   <h1 style="margin:0; font-size:22px; font-weight:700; letter-spacing:-0.5px;">Publisher Dashboard</h1>
   <div style="display:flex; gap:10px; align-items:center;">
     <span class="chip">Tier: <b style="color:var(--accent);">{{ current_user.plan|upper }}</b></span>
-    {% if current_user.stripe_customer_id %}
+    {% if current_user.razorpay_customer_id %}
     <form method="post" action="/billing/portal" style="display:inline">
       <button type="submit" class="btn secondary" style="padding:6px 12px; font-size:13px; font-weight:600;">Manage Billing</button>
     </form>

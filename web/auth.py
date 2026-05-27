@@ -21,7 +21,8 @@ class User(UserMixin):
         self.email = row["email"]
         self.name = row["name"]
         self.plan = row["plan"]
-        self.stripe_customer_id = row["stripe_customer_id"]
+        self.razorpay_customer_id = row["razorpay_customer_id"]
+        self.razorpay_subscription_id = row["razorpay_subscription_id"]
 
     @classmethod
     def from_id(cls, user_id: int):

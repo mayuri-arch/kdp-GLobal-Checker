@@ -1,24 +1,25 @@
-"""Stripe billing scaffolding.
+"""Razorpay billing integration.
 
 Setup:
-  1. Create two products in Stripe Dashboard:
-       - KDP Checker Pro     (e.g. $19/mo)     → price_id: price_XXXX
-       - KDP Checker Agency  (e.g. $79/mo)     → price_id: price_YYYY
-  2. Copy your secret key + webhook signing secret into .env:
-       STRIPE_SECRET_KEY=sk_live_...
-       STRIPE_WEBHOOK_SECRET=whsec_...
-       STRIPE_PRICE_PRO=price_XXXX
-       STRIPE_PRICE_AGENCY=price_YYYY
-  3. Point your webhook endpoint at /billing/webhook and subscribe to:
-       checkout.session.completed
-       customer.subscription.updated
-       customer.subscription.deleted
+  1. Create two products/plans in Razorpay Dashboard → Subscriptions:
+       - KDP Checker Pro     (e.g. ₹1499/mo or $19/mo) → plan_id: plan_XXXX
+       - KDP Checker Agency  (e.g. ₹5999/mo or $79/mo) → plan_id: plan_YYYY
+  2. Copy your keys into .env:
+       RAZORPAY_KEY_ID=rzp_test_...
+       RAZORPAY_KEY_SECRET=...
+       RAZORPAY_WEBHOOK_SECRET=...
+       RAZORPAY_PRICE_PRO=plan_XXXX
+       RAZORPAY_PRICE_AGENCY=plan_YYYY
+  3. Point your webhook endpoint in Razorpay Dashboard to /billing/webhook and subscribe to:
+       subscription.charged
+       subscription.cancelled
+       subscription.paused
 """
 from __future__ import annotations
 
 import os
 
-import stripe
+import razorpay
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for, abort, jsonify
 from flask_login import current_user, login_required
 
@@ -41,12 +42,12 @@ PLANS = {
 }
 
 
-def _configure_stripe():
-    key = os.environ.get("STRIPE_SECRET_KEY", "")
-    if not key:
-        return False
-    stripe.api_key = key
-    return True
+def _configure_razorpay():
+    key_id = os.environ.get("RAZORPAY_KEY_ID", "")
+    key_secret = os.environ.get("RAZORPAY_KEY_SECRET", "")
+    if not key_id or not key_secret:
+        return None
+    return razorpay.Client(auth=(key_id, key_secret))
 
 
 @billing_bp.get("/pricing")
@@ -59,24 +60,38 @@ def pricing():
 def checkout(plan):
     if plan not in PLANS or plan == "free":
         abort(404)
-    if not _configure_stripe():
-        return jsonify({"error": "Stripe not configured. Set STRIPE_SECRET_KEY."}), 503
+        
+    client = _configure_razorpay()
+    if not client:
+        return jsonify({"error": "Razorpay not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET."}), 503
 
-    price_env = {"pro": "STRIPE_PRICE_PRO", "agency": "STRIPE_PRICE_AGENCY"}[plan]
-    price_id = os.environ.get(price_env)
-    if not price_id:
-        return jsonify({"error": f"{price_env} not set in environment"}), 503
+    plan_env = {"pro": "RAZORPAY_PRICE_PRO", "agency": "RAZORPAY_PRICE_AGENCY"}[plan]
+    plan_id = os.environ.get(plan_env)
+    if not plan_id:
+        return jsonify({"error": f"{plan_env} not set in environment"}), 503
 
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        customer_email=current_user.email,
-        line_items=[{"price": price_id, "quantity": 1}],
-        success_url=url_for("billing.success", _external=True) + "?session_id={CHECKOUT_SESSION_ID}",
-        cancel_url=url_for("billing.pricing", _external=True),
-        metadata={"user_id": str(current_user.user_id), "plan": plan},
-        subscription_data={"metadata": {"user_id": str(current_user.user_id), "plan": plan}},
-    )
-    return redirect(session.url, code=303)
+    try:
+        # Create a Subscription via Razorpay Subscriptions API
+        # total_count=120 represents a 10-year monthly subscription
+        sub_data = {
+            "plan_id": plan_id,
+            "total_count": 120,
+            "quantity": 1,
+            "customer_notify": 1,
+            "notes": {
+                "user_id": str(current_user.user_id),
+                "plan": plan
+            }
+        }
+        
+        subscription = client.subscription.create(sub_data)
+        short_url = subscription.get("short_url")
+        if not short_url:
+            return jsonify({"error": "Failed to generate checkout URL from Razorpay"}), 500
+        
+        return redirect(short_url, code=303)
+    except Exception as e:
+        return jsonify({"error": f"Razorpay error: {e}"}), 500
 
 
 @billing_bp.get("/success")
@@ -87,57 +102,67 @@ def success():
 
 @billing_bp.post("/webhook")
 def webhook():
-    if not _configure_stripe():
-        return "stripe not configured", 503
-    secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    client = _configure_razorpay()
+    if not client:
+        return "razorpay not configured", 503
+        
+    secret = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
     payload = request.get_data()
-    sig = request.headers.get("Stripe-Signature", "")
+    sig = request.headers.get("X-Razorpay-Signature", "")
+    
+    if secret:
+        try:
+            # Verify Razorpay webhook signature
+            client.utility.verify_webhook_signature(payload.decode("utf-8"), sig, secret)
+        except Exception as e:
+            current_app.logger.exception("Webhook verify failed")
+            return f"bad signature: {e}", 400
+
     try:
-        event = stripe.Webhook.construct_event(payload, sig, secret) if secret \
-                else stripe.Event.construct_from(request.get_json(silent=True) or {}, stripe.api_key)
-    except Exception as e:
-        current_app.logger.exception("Webhook verify failed")
-        return f"bad signature: {e}", 400
+        event_data = request.get_json(silent=True) or {}
+    except Exception:
+        return "invalid json", 400
 
-    etype = event["type"]
-    data = event["data"]["object"]
+    etype = event_data.get("event")
+    payload_obj = event_data.get("payload", {})
 
-    if etype == "checkout.session.completed":
-        user_id = int(data.get("metadata", {}).get("user_id", 0) or 0)
-        plan = data.get("metadata", {}).get("plan", "pro")
-        customer = data.get("customer")
-        sub = data.get("subscription")
+    if etype == "subscription.charged":
+        sub = payload_obj.get("subscription", {}).get("entity", {})
+        notes = sub.get("notes", {})
+        user_id = int(notes.get("user_id", 0) or 0)
+        plan = notes.get("plan", "pro")
+        customer_id = sub.get("customer_id")
+        sub_id = sub.get("id")
+        
+        # Robust fallback: lookup by customer_id if notes are empty
+        if not user_id and customer_id:
+            with storage.connect() as conn:
+                user = conn.execute("SELECT id FROM users WHERE razorpay_customer_id = ?", (customer_id,)).fetchone()
+                if user:
+                    user_id = user["id"]
+                    
         if user_id:
             with storage.connect() as conn:
-                storage.update_user_plan(conn, user_id, plan, customer, sub)
+                storage.update_user_plan(conn, user_id, plan, customer_id, sub_id)
 
-    elif etype == "customer.subscription.updated":
-        customer = data.get("customer")
-        items = data.get("items", {}).get("data", [])
-        plan = "free"
-        if items:
-            price_id = items[0].get("price", {}).get("id")
-            if price_id == os.environ.get("STRIPE_PRICE_PRO"):
-                plan = "pro"
-            elif price_id == os.environ.get("STRIPE_PRICE_AGENCY"):
-                plan = "agency"
+    elif etype in ("subscription.cancelled", "subscription.paused"):
+        sub = payload_obj.get("subscription", {}).get("entity", {})
+        customer_id = sub.get("customer_id")
+        sub_id = sub.get("id")
         
-        # If subscription is no longer active/trialing, downgrade to free
-        status = data.get("status")
-        if status not in ("active", "trialing"):
-            plan = "free"
-            
-        if customer:
-            with storage.connect() as conn:
-                user = conn.execute("SELECT id FROM users WHERE stripe_customer_id = ?", (customer,)).fetchone()
+        # Get user_id from notes if present
+        notes = sub.get("notes", {})
+        user_id = int(notes.get("user_id", 0) or 0)
+        
+        with storage.connect() as conn:
+            if user_id:
+                storage.update_user_plan(conn, user_id, "free")
+            elif customer_id:
+                user = conn.execute("SELECT id FROM users WHERE razorpay_customer_id = ?", (customer_id,)).fetchone()
                 if user:
-                    storage.update_user_plan(conn, user["id"], plan, customer, data.get("id"))
-
-    elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
-        customer = data.get("customer")
-        if customer:
-            with storage.connect() as conn:
-                user = conn.execute("SELECT id FROM users WHERE stripe_customer_id = ?", (customer,)).fetchone()
+                    storage.update_user_plan(conn, user["id"], "free")
+            elif sub_id:
+                user = conn.execute("SELECT id FROM users WHERE razorpay_subscription_id = ?", (sub_id,)).fetchone()
                 if user:
                     storage.update_user_plan(conn, user["id"], "free")
 
@@ -147,18 +172,6 @@ def webhook():
 @billing_bp.post("/portal")
 @login_required
 def portal():
-    if not _configure_stripe():
-        return jsonify({"error": "Stripe is not configured"}), 503
-    if not current_user.stripe_customer_id:
-        flash("You do not have an active billing profile. Select a plan to upgrade.", "error")
-        return redirect(url_for("billing.pricing"))
-    try:
-        session = stripe.billing_portal.Session.create(
-            customer=current_user.stripe_customer_id,
-            return_url=url_for("dashboard", _external=True),
-        )
-        return redirect(session.url, code=303)
-    except Exception as e:
-        flash(f"Could not open billing portal: {e}", "error")
-        return redirect(url_for("dashboard"))
-
+    # Graceful notification mapping to dashboard
+    flash("To manage your Razorpay subscription, update cards, or cancel, please check your email invoice link or contact support.", "info")
+    return redirect(url_for("dashboard"))
