@@ -53,7 +53,12 @@ def login():
     return render_template("login.html")
 
 
-def _send_reset_email(to_addr: str, reset_link: str) -> bool:
+def _send_reset_email(to_addr: str, reset_link: str) -> tuple[bool, bool]:
+    """
+    Sends the password recovery email.
+    Returns:
+        (success_bool, configured_bool)
+    """
     host = os.environ.get("SMTP_HOST")
     port_val = os.environ.get("SMTP_PORT", "587")
     try:
@@ -65,7 +70,7 @@ def _send_reset_email(to_addr: str, reset_link: str) -> bool:
     from_addr = os.environ.get("SMTP_FROM", "noreply@kdpchecker.com")
     
     if not host or not user or not password:
-        return False
+        return False, False
         
     msg = MIMEMultipart()
     msg["From"] = from_addr
@@ -86,24 +91,30 @@ The KDP Global Checker Team"""
     msg.attach(MIMEText(body, "plain"))
     
     try:
-        # Dynamic port selection supporting both SSL (465) and TLS (587)
+        # Dynamic port selection supporting implicit SSL (465) and explicit TLS upgrade (587, 25, 2525, etc.)
         if port == 465:
             smtp = smtplib.SMTP_SSL(host, port, timeout=15)
+            smtp.ehlo()
         else:
             smtp = smtplib.SMTP(host, port, timeout=15)
-            if port in (587, 25):
+            smtp.ehlo()
+            if smtp.has_extn("starttls"):
                 smtp.starttls()
+                smtp.ehlo()
                 
         try:
             if user and password:
                 smtp.login(user, password)
             smtp.sendmail(from_addr, [to_addr], msg.as_string())
-            return True
+            return True, True
         finally:
-            smtp.quit()
+            try:
+                smtp.quit()
+            except Exception:
+                pass
     except Exception as e:
         print(f"Failed to send SMTP email to {to_addr}: {e}", flush=True)
-        return False
+        return False, True
 
 
 @auth_bp.post("/login")
@@ -186,11 +197,17 @@ def forgot_password_post():
     print(f"\n========================================\nPASSWORD RECOVERY LINK:\n{reset_link}\n========================================\n", flush=True)
     
     # Try real SMTP delivery
-    email_sent = _send_reset_email(email, reset_link)
+    email_sent, smtp_configured = _send_reset_email(email, reset_link)
     if email_sent:
         flash("A password recovery link has been sent to your email inbox.", "success")
+    elif smtp_configured:
+        # Configured but sending failed (e.g. connection or authentication error)
+        flash("SMTP is configured but sending failed. Please check your credentials, port, or server logs.", "error")
+        is_prod = os.environ.get("FLASK_ENV") == "production" or os.environ.get("DATABASE_URL") is not None
+        if not is_prod:
+             flash(f"Dev recovery link (logged): {reset_link}", "info")
     else:
-        # Fallback to console logs and warning alert
+        # Not configured
         flash("A password recovery link has been generated in the logs (SMTP not configured).", "success")
         is_prod = os.environ.get("FLASK_ENV") == "production" or os.environ.get("DATABASE_URL") is not None
         if not is_prod:
@@ -235,3 +252,16 @@ def reset_password_post(token):
         
     flash("Password reset successful! You can now log in with your new password.", "success")
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.get("/debug-smtp")
+def debug_smtp():
+    from flask import jsonify
+    return jsonify({
+        "SMTP_HOST": "Set" if os.environ.get("SMTP_HOST") else "Not Set",
+        "SMTP_PORT": os.environ.get("SMTP_PORT", "587 (Default)"),
+        "SMTP_USER": "Set" if os.environ.get("SMTP_USER") else "Not Set",
+        "SMTP_PASSWORD": "Set" if os.environ.get("SMTP_PASSWORD") else "Not Set",
+        "SMTP_FROM": "Set" if os.environ.get("SMTP_FROM") else "Not Set",
+        "FLASK_ENV": os.environ.get("FLASK_ENV", "not set")
+    })

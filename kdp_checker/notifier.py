@@ -234,13 +234,25 @@ def _send_email(to_addr: str, subject: str, text: str, html: str, config: dict) 
     msg.attach(MIMEText(text, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
+    host = config["host"]
+    port = config["port"]
+    user = config["user"]
+    password = config["password"]
+
     # Establish connection
-    smtp = smtplib.SMTP(config["host"], config["port"], timeout=15)
-    try:
-        if config["port"] == 587:
+    if port == 465:
+        smtp = smtplib.SMTP_SSL(host, port, timeout=15)
+        smtp.ehlo()
+    else:
+        smtp = smtplib.SMTP(host, port, timeout=15)
+        smtp.ehlo()
+        if smtp.has_extn("starttls"):
             smtp.starttls()
-        if config["user"] and config["password"]:
-            smtp.login(config["user"], config["password"])
+            smtp.ehlo()
+
+    try:
+        if user and password:
+            smtp.login(user, password)
         smtp.sendmail(config["from_addr"], [to_addr], msg.as_string())
     finally:
         try:

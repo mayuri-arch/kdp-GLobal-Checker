@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-load_dotenv(ROOT / ".env")
+load_dotenv(ROOT / ".env", override=True)
 
 from flask import Flask, Response, abort, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
