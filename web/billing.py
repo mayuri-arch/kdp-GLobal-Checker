@@ -86,9 +86,7 @@ def checkout(plan):
             "notes": {
                 "user_id": str(current_user.user_id),
                 "plan": plan
-            },
-            "callback_url": url_for("billing.success", _external=True),
-            "callback_method": "get"
+            }
         }
         
         subscription = client.subscription.create(sub_data)
