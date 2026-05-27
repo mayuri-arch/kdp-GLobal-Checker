@@ -1,0 +1,49 @@
+# Render Blueprint — infrastructure as code.
+# In the Render dashboard: New + → Blueprint → pick this repo.
+# Render will read this file and provision the service automatically.
+
+services:
+  - type: web
+    name: kdp-checker
+    runtime: python
+    plan: free                     # upgrade to starter ($7) for persistent disk
+    region: oregon                 # change if you prefer; keep one region
+    branch: main                   # your default branch on GitHub
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "gunicorn web.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120"
+    healthCheckPath: "/"
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: FLASK_SECRET_KEY
+        generateValue: true        # Render generates a secure random value
+      - key: KDP_DB
+        value: /tmp/kdp_checker.db # free tier has no persistent disk; see note below
+      - key: ENABLE_SCHEDULER
+        value: "0"                 # set to "1" after upgrading to a paid plan
+      # Stripe (optional — paste keys in the dashboard, not here)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_PRO
+        sync: false
+      - key: STRIPE_PRICE_AGENCY
+        sync: false
+
+# IMPORTANT — Free plan caveats:
+#   1. No persistent disk: the SQLite file at /tmp resets on every deploy/restart.
+#      For real users, upgrade to "starter" and add a disk:
+#        disks:
+#          - name: data
+#            mountPath: /var/data
+#            sizeGB: 1
+#      then set KDP_DB=/var/data/kdp_checker.db
+#
+#   2. Free instances sleep after 15 min of inactivity; first request after
+#      sleeping takes ~30s.
+#
+#   3. The Playwright browser fallback is NOT installed on free tier
+#      (binary is ~150MB). The HTTP-only path still works — results flagged
+#      BLOCKED will simply stay BLOCKED instead of being re-tried in Chromium.
