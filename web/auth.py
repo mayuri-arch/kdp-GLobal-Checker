@@ -86,10 +86,15 @@ The KDP Global Checker Team"""
     msg.attach(MIMEText(body, "plain"))
     
     try:
-        smtp = smtplib.SMTP(host, port, timeout=15)
-        try:
-            if port == 587:
+        # Dynamic port selection supporting both SSL (465) and TLS (587)
+        if port == 465:
+            smtp = smtplib.SMTP_SSL(host, port, timeout=15)
+        else:
+            smtp = smtplib.SMTP(host, port, timeout=15)
+            if port in (587, 25):
                 smtp.starttls()
+                
+        try:
             if user and password:
                 smtp.login(user, password)
             smtp.sendmail(from_addr, [to_addr], msg.as_string())
@@ -97,7 +102,7 @@ The KDP Global Checker Team"""
         finally:
             smtp.quit()
     except Exception as e:
-        print(f"Failed to send SMTP email: {e}", flush=True)
+        print(f"Failed to send SMTP email to {to_addr}: {e}", flush=True)
         return False
 
 
