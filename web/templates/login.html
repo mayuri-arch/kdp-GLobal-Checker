@@ -3,7 +3,7 @@
 {% block content %}
 <div class="panel" style="max-width:420px; margin:40px auto;">
   <h2>Log in</h2>
-  <form method="post" action="/auth/login">
+  <form method="post" action="/auth/login" onsubmit="this.querySelector('button[type=submit]').disabled=true;">
     {% if show_forgot %}
     <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.25); border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px; color:#ef4444; display:flex; justify-content:space-between; align-items:center;">
       <span>Incorrect credentials.</span>

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="panel" style="max-width:420px; margin:40px auto;">
   <h2>Create your account</h2>
-  <form method="post" action="/auth/signup">
+  <form method="post" action="/auth/signup" onsubmit="this.querySelector('button[type=submit]').disabled=true;">
     <div style="margin-bottom:12px;"><label>Your name</label><input type="text" name="name" /></div>
     <div style="margin-bottom:12px;"><label>Email</label><input type="email" name="email" required /></div>
     <div style="margin-bottom:12px;"><label>Password (min 8 chars)</label><input type="password" name="password" required minlength="8" /></div>

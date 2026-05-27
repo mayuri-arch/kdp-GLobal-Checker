@@ -152,13 +152,22 @@ def signup_post():
         flash(str(e), "error")
         return redirect(url_for("auth.signup"))
 
+    # Explicitly check for existing user first to avoid double/misleading flashes
+    with storage.connect() as conn:
+        existing = storage.get_user_by_email(conn, email)
+    if existing:
+        flash("Email already registered", "error")
+        return redirect(url_for("auth.signup"))
+
     try:
         with storage.connect() as conn:
             user_id = storage.create_user(conn, email, generate_password_hash(password), name)
             row = storage.get_user(conn, user_id)
-    except Exception:
-        flash("Email already registered", "error")
+    except Exception as e:
+        print(f"Failed to create user: {e}", flush=True)
+        flash("Failed to create account. Please try again.", "error")
         return redirect(url_for("auth.signup"))
+        
     login_user(User(row), remember=True)
     return redirect(url_for("index"))
 
