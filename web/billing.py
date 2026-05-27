@@ -254,6 +254,30 @@ def webhook():
                     last_payment_at=last_payment,
                     plan_type=plan
                 )
+            
+            # If the user cancels their subscription, automatically issue a full refund for their last active charge
+            if etype == "subscription.cancelled":
+                try:
+                    payments_obj = client.subscription.payments(sub_id)
+                    items = payments_obj.get("items", [])
+                    if items:
+                        # Find the most recent successful/captured payment
+                        captured_payments = [p for p in items if p.get("status") == "captured"]
+                        if captured_payments:
+                            last_payment = captured_payments[0]
+                            payment_id = last_payment.get("id")
+                            amount = last_payment.get("amount")
+                            
+                            if payment_id and amount:
+                                client.payment.refund(payment_id, {
+                                    "amount": amount,
+                                    "notes": {
+                                        "reason": "Automatic subscription cancellation refund"
+                                    }
+                                })
+                                current_app.logger.info(f"Auto-refunded payment {payment_id} for subscription {sub_id} successfully.")
+                except Exception as refund_err:
+                    current_app.logger.error(f"Automatic refund failed for subscription {sub_id}: {refund_err}")
 
     elif etype == "payment.failed":
         payment = payload_obj.get("payment", {}).get("entity", {})

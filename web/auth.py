@@ -110,8 +110,7 @@ def login_post():
     with storage.connect() as conn:
         row = storage.get_user_by_email(conn, email)
     if not row or not check_password_hash(row["password_hash"], password):
-        flash("Invalid credentials", "error")
-        # Direct template render with show_forgot=True so recovery alert triggers instantly
+        # Direct template render with show_forgot=True so recovery alert triggers instantly without double warnings
         return render_template("login.html", show_forgot=True)
         
     login_user(User(row), remember=remember)
