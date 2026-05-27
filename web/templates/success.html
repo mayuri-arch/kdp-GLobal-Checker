@@ -2,7 +2,13 @@
 {% block content %}
 <div class="panel" style="max-width:520px; margin:60px auto; text-align:center;">
   <h2>You're upgraded</h2>
-  <p>Thanks for subscribing. Your plan is active — head to the <a href="/dashboard">dashboard</a> to enable monitoring on your ASINs.</p>
+  <p>Thanks for subscribing. Your plan is active. Redirecting you to your dashboard in 3 seconds...</p>
   <a class="btn" href="/dashboard">Open dashboard</a>
 </div>
+
+<script>
+  setTimeout(function() {
+    window.location.href = "/dashboard";
+  }, 3000);
+</script>
 {% endblock %}

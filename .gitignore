@@ -44,4 +44,6 @@ out.csv
 
 # Claude workspace and subagents
 .claude/
+scratch/
+
 

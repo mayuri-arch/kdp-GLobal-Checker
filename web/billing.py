@@ -86,7 +86,9 @@ def checkout(plan):
             "notes": {
                 "user_id": str(current_user.user_id),
                 "plan": plan
-            }
+            },
+            "callback_url": url_for("billing.success", _external=True),
+            "callback_method": "get"
         }
         
         subscription = client.subscription.create(sub_data)
@@ -102,6 +104,37 @@ def checkout(plan):
 @billing_bp.get("/success")
 @login_required
 def success():
+    sub_id = request.args.get("razorpay_subscription_id")
+    if sub_id:
+        client = _configure_razorpay()
+        if client:
+            try:
+                # Synchronously verify subscription status and perform instant upgrade
+                subscription = client.subscription.fetch(sub_id)
+                status = subscription.get("status")
+                notes = subscription.get("notes", {})
+                plan = notes.get("plan", "pro")
+                customer_id = subscription.get("customer_id")
+                
+                if status in ("active", "authenticated", "activated"):
+                    with storage.connect() as conn:
+                        storage.update_user_plan(
+                            conn,
+                            user_id=current_user.user_id,
+                            plan=plan,
+                            razorpay_customer_id=customer_id,
+                            razorpay_subscription_id=sub_id,
+                            subscription_status=status,
+                            subscription_start=subscription.get("current_start") or subscription.get("start_at"),
+                            subscription_end=subscription.get("current_end") or subscription.get("end_at"),
+                            plan_type=plan
+                        )
+                    # Dynamically update the current session to avoid requiring page refresh
+                    current_user.plan = plan
+                    flash(f"Success! Your plan has been upgraded to {plan.upper()}.", "success")
+            except Exception as e:
+                current_app.logger.exception(f"Synchronous subscription check failed: {e}")
+
     return render_template("success.html")
 
 

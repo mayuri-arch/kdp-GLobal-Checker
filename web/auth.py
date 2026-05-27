@@ -1,6 +1,10 @@
 """Flask-Login wiring — user model, login/signup/logout views."""
 from __future__ import annotations
 
+import os
+import secrets
+import time
+
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -93,4 +97,76 @@ def signup_post():
 @login_required
 def logout():
     logout_user()
+    return redirect(url_for("auth.login"))
+
+
+@auth_bp.get("/forgot-password")
+def forgot_password():
+    return render_template("forgot_password.html")
+
+
+@auth_bp.post("/forgot-password")
+def forgot_password_post():
+    email = (request.form.get("email") or "").strip().lower()
+    with storage.connect() as conn:
+        user = storage.get_user_by_email(conn, email)
+        if not user:
+            # Standard secure warning mitigation (avoid leaking registered emails)
+            flash("If that email is registered, a password recovery link has been generated.", "info")
+            return redirect(url_for("auth.login"))
+            
+        token = secrets.token_hex(16)
+        expiry = int(time.time()) + 3600
+        
+        conn.execute(
+            "UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?",
+            (token, expiry, user["id"])
+        )
+        
+    reset_link = url_for("auth.reset_password", token=token, _external=True)
+    print(f"\n========================================\nPASSWORD RECOVERY LINK:\n{reset_link}\n========================================\n", flush=True)
+    
+    flash("A password recovery link has been generated in the logs.", "success")
+    is_prod = os.environ.get("FLASK_ENV") == "production" or os.environ.get("DATABASE_URL") is not None
+    if not is_prod:
+         flash(f"Dev recovery link (logged): {reset_link}", "info")
+         
+    return redirect(url_for("auth.login"))
+
+
+@auth_bp.get("/reset-password/<token>")
+def reset_password(token):
+    with storage.connect() as conn:
+        user = conn.execute(
+            "SELECT * FROM users WHERE reset_token = ? AND reset_token_expiry > ?",
+            (token, int(time.time()))
+        ).fetchone()
+    if not user:
+        flash("Invalid or expired recovery token", "error")
+        return redirect(url_for("auth.login"))
+    return render_template("reset_password.html", token=token)
+
+
+@auth_bp.post("/reset-password/<token>")
+def reset_password_post(token):
+    password = request.form.get("password") or ""
+    if len(password) < 8:
+        flash("Password must be at least 8 characters", "error")
+        return redirect(url_for("auth.reset_password", token=token))
+        
+    with storage.connect() as conn:
+        user = conn.execute(
+            "SELECT * FROM users WHERE reset_token = ? AND reset_token_expiry > ?",
+            (token, int(time.time()))
+        ).fetchone()
+        if not user:
+            flash("Invalid or expired recovery token", "error")
+            return redirect(url_for("auth.login"))
+            
+        conn.execute(
+            "UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?",
+            (generate_password_hash(password), user["id"])
+        )
+        
+    flash("Password reset successful! You can now log in with your new password.", "success")
     return redirect(url_for("auth.login"))

@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS users (
     subscription_end INTEGER,
     last_payment_at INTEGER,
     plan_type TEXT DEFAULT 'free',
+    reset_token TEXT,
+    reset_token_expiry INTEGER,
     created_at INTEGER NOT NULL
 );
 
@@ -173,7 +175,9 @@ def connect(db_path: str | Path = DEFAULT_DB):
                                       ("subscription_start", "BIGINT"),
                                       ("subscription_end", "BIGINT"),
                                       ("last_payment_at", "BIGINT"),
-                                      ("plan_type", "TEXT DEFAULT 'free'")]:
+                                      ("plan_type", "TEXT DEFAULT 'free'"),
+                                      ("reset_token", "TEXT"),
+                                      ("reset_token_expiry", "BIGINT")]:
                     try:
                         cur.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {col_type}")
                     except Exception:
@@ -196,7 +200,9 @@ def connect(db_path: str | Path = DEFAULT_DB):
                                   ("subscription_start", "INTEGER"),
                                   ("subscription_end", "INTEGER"),
                                   ("last_payment_at", "INTEGER"),
-                                  ("plan_type", "TEXT DEFAULT 'free'")]:
+                                  ("plan_type", "TEXT DEFAULT 'free'"),
+                                  ("reset_token", "TEXT"),
+                                  ("reset_token_expiry", "INTEGER")]:
                 try:
                     conn.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
                 except sqlite3.OperationalError:
